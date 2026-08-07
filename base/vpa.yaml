@@ -1,0 +1,13 @@
+# Recommendation-only VPA (D-012, epic homelab#455). Never auto-applies.
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: actual-budget
+  namespace: actual-budget
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: actual-budget
+  updatePolicy:
+    updateMode: "Off"

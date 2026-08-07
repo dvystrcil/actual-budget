@@ -1,0 +1,88 @@
+# Real facts verified directly from upstream before writing this
+# (adopt-third-party-container checklist, homelab#847):
+# - Real self-host server is `actualbudget/actual-server` (Docker Hub) /
+#   `ghcr.io/actualbudget/actual` -- distinct from the `actualbudget/actual`
+#   monorepo's own docker-compose.yml, which is dev-only
+#   (`actual-development: build: .`).
+# - Dockerfile confirmed: non-root uid 1001 (`useradd --uid 1001`), tini
+#   entrypoint, single writable dir /data (chowned to that uid at build),
+#   port 5006, no other exposed ports.
+# - Storage is SQLite-only, confirmed by grepping the real config schema
+#   (packages/sync-server/src/load-config.js) for postgres/database.*url/db_:
+#   zero matches. server-files/account.sqlite (server metadata, hashed
+#   server password, session token) + one db.sqlite blob per budget file
+#   under user-files/. No Postgres swap is possible here -- this is a real
+#   exception to the sqlite-to-pgo-default convention, not an oversight.
+# - Auth: no env var pre-seeds the server password. Confirmed in
+#   app-account.js: first-visit interactive POST /bootstrap flow sets it.
+#   Whoever visits first sets the password -- fine given this instance is
+#   only reachable via internal Pi-hole DNS, same threat model as every
+#   other homelab app, not internet-exposed. OIDC/Keycloak support exists
+#   upstream (tested provider) but Keycloak isn't actually deployed live
+#   in this cluster yet -- deferred until it is.
+# - No backup env vars either: confirmed in docs, server-side automatic
+#   backups don't exist (desktop-app-only feature). Real backup story here
+#   is volume-level (PVC snapshot), not anything Actual itself does.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: actual-budget
+  namespace: actual-budget
+  labels:
+    app.kubernetes.io/name: actual-budget
+    app.kubernetes.io/managed-by: argocd
+spec:
+  replicas: 1
+  strategy:
+    # Single ReadWriteOnce PVC -- a rolling update would try to schedule
+    # the new pod before the old one releases the volume. Recreate avoids
+    # that deadlock (same reasoning as any single-writer SQLite app).
+    type: Recreate
+  selector:
+    matchLabels:
+      app: actual-budget
+  template:
+    metadata:
+      labels:
+        app: actual-budget
+    spec:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        runAsNonRoot: true
+        fsGroup: 1001
+      containers:
+        - name: actual-budget
+          image: docker.io/actualbudget/actual-server:latest
+          ports:
+            - name: http
+              containerPort: 5006
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            # D-012: no measured data yet -- ships with an Off-mode VPA
+            # (vpa.yaml) to right-size from real usage. Single Node
+            # process, no DB engine, expect this to be small.
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: actual-budget-data
+      restartPolicy: Always

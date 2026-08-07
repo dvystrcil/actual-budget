@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: actual-budget-data
+  namespace: actual-budget
+  labels:
+    app.kubernetes.io/name: actual-budget
+    app.kubernetes.io/component: pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # server-files/account.sqlite (server metadata) + one db.sqlite
+      # blob per budget file under user-files/ -- small for a household.
+      storage: 1Gi
