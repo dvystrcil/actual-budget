@@ -72,15 +72,17 @@ spec:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
+          # D-012 (VPA epic homelab#455): requests right-sized from the
+          # Off-mode VPA's measured target. See notes in the PR body.
           resources:
             # D-012: no measured data yet -- ships with an Off-mode VPA
             # (vpa.yaml) to right-size from real usage. Single Node
             # process, no DB engine, expect this to be small.
             requests:
               cpu: 25m
-              memory: 128Mi
+              memory: 250Mi
             limits:
-              memory: 256Mi
+              memory: 320Mi
       volumes:
         - name: data
           persistentVolumeClaim:
